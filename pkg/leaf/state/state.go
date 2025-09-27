@@ -31,6 +31,7 @@ func NewSmallState(workers []WorkerID, logger *slog.Logger) *SmallState {
 
 func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID) error) {
 	s.mu.Lock()
+
 	s.autoscalers[functionID] = NewAutoscaler(functionID, s.workers, metricChan, scaleUpCallback, s.logger)
 	// TODO: pick a way to manage context correctly
 	go s.autoscalers[functionID].Scale(context.TODO())
@@ -61,7 +62,7 @@ type Autoscaler struct {
 }
 
 func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID) error, logger *slog.Logger) *Autoscaler {
-	return &Autoscaler{
+	as := &Autoscaler{
 		functionID:                functionID,
 		workers:                   workers,
 		MetricChan:                metricChan,
@@ -75,6 +76,8 @@ func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bo
 		maxRunningInstances:       10,
 		targetInstanceConcurrency: 250,
 	}
+	as.runningInstances.Add(1) //since Autoscaler runs after a first instance has been started
+	return as
 }
 
 func (a *Autoscaler) runMetricReceiver(ctx context.Context) {
