@@ -54,12 +54,41 @@ type dependencyData struct {
 	ip         string
 }
 
+type dependencyUpdate struct {
+	dependency string
+	address    string
+}
+
+type DependencyMap struct {
+	mu sync.RWMutex
+	m  map[string]string
+}
+
+func NewDependencyMap(defaults map[string]string) *DependencyMap {
+	return &DependencyMap{
+		m: defaults,
+	}
+}
+
+func (s *DependencyMap) Get(key string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.m[key]
+	return v, ok
+}
+
+func (s *DependencyMap) Set(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[key] = value
+}
+
 // CreateFunction should only create the function, e.g. save its Config and image tag in local cache
-func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctionRequest) (*leaf.CreateFunctionResponse, string, error) {
+func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctionRequest) (*leaf.CreateFunctionResponse, error) {
 
 	functionID, err := s.database.Put(req.Image, req.Config)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to store function in database: %w", err)
+		return nil, fmt.Errorf("failed to store function in database: %w", err)
 	}
 
 	s.functionIdCache[functionID] = kv.FunctionData{
@@ -68,7 +97,19 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 	}
 
 	var dependencies []string //slice of imageTags, that are the function's dependencies
-	address, err := s.StartDependencies(ctx, functionID, req.Image.Tag, dependencies)
+	dependencyMap := s.StartDependencies(ctx, functionID, req.Image.Tag, dependencies)
+
+	//next, start function itself
+	startResp, err := s.startInstance(ctx, s.workerIds[0], state.FunctionID(functionID), dependencyMap) //also pass dependencyMap
+
+	if err != nil {
+		return nil, err
+	}
+	s.dependencyCache[req.Image.Tag] = dependencyData{
+		instanceID: string(startResp.InstanceId),
+		functionID: functionID,
+		ip:         startResp.InstanceIp,
+	}
 
 	s.functionMetricChansMutex.Lock()
 	s.functionMetricChans[state.FunctionID(functionID)] = make(chan bool, 10000)
@@ -77,7 +118,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 	s.state.AddFunction(state.FunctionID(functionID),
 		s.functionMetricChans[state.FunctionID(functionID)],
 		func(ctx context.Context, functionID state.FunctionID, workerID state.WorkerID) error {
-			_, _, err := s.startInstance(ctx, workerID, functionID)
+			_, err := s.startInstance(ctx, workerID, functionID, nil)
 			if err != nil {
 				return err
 			}
@@ -86,21 +127,29 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 	return &leaf.CreateFunctionResponse{
 		FunctionId: functionID,
-	}, address, nil
+	}, nil
 
 }
 
-func (s *LeafServer) StartDependencies(ctx context.Context, functionID string, imageTag string, dependencies []string) (string, error) {
+func (s *LeafServer) StartDependencies(ctx context.Context, functionID string, imageTag string, dependencies []string) *DependencyMap {
 
 	//first check for dependencies
-	dependencyAddresses := make(map[string]string) //map of imageTag -> address to pass to function
+	dependencyAddresses := NewDependencyMap(make(map[string]string)) //map of imageTag -> address to pass to function
+
+	updates := make(chan dependencyUpdate)
+
+	go func() {
+		for u := range updates {
+			dependencyAddresses.Set(u.dependency, u.address)
+		}
+	}()
 
 	for _, dependency := range dependencies {
-		v, ok := s.dependencyCache[dependency]
+		v, ok := s.dependencyCache[dependency] // check if dependency already instantiated
 
-		if ok {
-			dependencyAddresses[dependency] = v.ip
-		} else {
+		if ok { // if yes, add
+			dependencyAddresses.Set(dependency, v.ip)
+		} else { // if no, create new and then add
 			var cpuPeriod int64
 			var cpuQuota int64
 			var memory int64
@@ -124,24 +173,19 @@ func (s *LeafServer) StartDependencies(ctx context.Context, functionID string, i
 				Config: config,
 			}
 
-			_, newAddr, _ := s.CreateFunction(ctx, createReq)
-
-			dependencyAddresses[dependency] = newAddr
+			go func() {
+				resp, _ := s.CreateFunction(ctx, createReq)
+				newAddr := resp.FunctionId
+				updates <- dependencyUpdate{
+					dependency: dependency,
+					address:    newAddr,
+				}
+			}()
 		}
 	}
 
-	//next, start function itself
-	newInstID, newAddr, err := s.startInstance(ctx, s.workerIds[0], state.FunctionID(functionID))
-	if err != nil {
-		return "", err
-	}
-	s.dependencyCache[imageTag] = dependencyData{
-		instanceID: string(newInstID),
-		functionID: functionID,
-		ip:         newAddr,
-	}
+	return dependencyAddresses
 
-	return newAddr, nil
 }
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *commonpb.CallRequest) (*commonpb.CallResponse, error) {
@@ -237,17 +281,18 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 	return resp, nil
 }
 
-func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID) (state.InstanceID, string, error) {
+func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID, dependencyMap *DependencyMap) (*workerPB.StartResponse, error) {
 	client, err := s.getOrCreateWorkerClient(workerID)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 	resp, err := client.Start(ctx, &workerPB.StartRequest{FunctionId: string(functionId)})
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
 
-	return state.InstanceID(resp.InstanceId), resp.InstanceIp, nil
+	return resp, nil //we should use proto here, too
+	//return resp
 }
 
 func (s *LeafServer) getOrCreateWorkerClient(workerID state.WorkerID) (workerPB.WorkerClient, error) {
