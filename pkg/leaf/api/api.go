@@ -50,6 +50,8 @@ type workerClient struct {
 // CreateFunction should only create the function, e.g. save its Config and image tag in local cache
 func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctionRequest) (*leaf.CreateFunctionResponse, error) {
 
+	functionDependencies := req.Config.FunctionDependencies
+
 	functionID, err := s.database.Put(req.Image, req.Config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to store function in database: %w", err)
@@ -60,29 +62,18 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 		Image:  req.Image,
 	}
 
-	//slice of imageTags, that are the function's dependencies
-	//dependencyMap := s.StartDependencies(ctx, functionID, req.Image.Tag, dependencies)
-
-	//next, start function itself
-	//startResp, err := s.startInstance(ctx, s.workerIds[0], state.FunctionID(functionID), dependencyMap) //also pass dependencyMap
-
 	if err != nil {
 		return nil, err
 	}
-	//s.dependencyCache[req.Image.Tag] = dependencyData{
-	//	instanceID: string(startResp.InstanceId),
-	//	functionID: functionID,
-	//	ip:         startResp.InstanceIp,
-	//}
 
 	s.functionMetricChansMutex.Lock()
 	s.functionMetricChans[state.FunctionID(functionID)] = make(chan bool, 10000)
 	s.functionMetricChansMutex.Unlock()
 
 	s.state.AddFunction(state.FunctionID(functionID),
-		s.functionMetricChans[state.FunctionID(functionID)],
+		s.functionMetricChans[state.FunctionID(functionID)], functionDependencies,
 		func(ctx context.Context, functionID state.FunctionID, workerID state.WorkerID, dependencies []string) error {
-			// TODO: implement dependency check
+
 			var wg sync.WaitGroup
 			dependencyAddresses := make(map[string]string)
 
@@ -94,45 +85,46 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 			cache := autoscaler.GetDependencyCache()
 
-			for _, dependency := range dependencies {
-				v, ok := cache[dependency]
+			if !(dependencies == nil) && !(len(dependencies) == 0) {
+				for _, dependency := range dependencies {
+					v, ok := cache[dependency]
 
-				if !ok {
-					var cpuPeriod int64
-					var cpuQuota int64
-					var memory int64
+					if !ok {
+						var cpuPeriod int64
+						var cpuQuota int64
+						var memory int64
 
-					cpuConfig := &commonpb.CPUConfig{
-						Period: cpuPeriod,
-						Quota:  cpuQuota,
+						cpuConfig := &commonpb.CPUConfig{
+							Period: cpuPeriod,
+							Quota:  cpuQuota,
+						}
+
+						config := &commonpb.Config{
+							Memory: memory,
+							Cpu:    cpuConfig,
+						}
+
+						image := &commonpb.Image{
+							Tag: dependency,
+						}
+
+						createReq := &leaf.CreateFunctionRequest{
+							Image:  image,
+							Config: config,
+						}
+
+						wg.Go(func() {
+							resp, _ := s.CreateFunction(ctx, createReq)
+							dependencyAddresses[dependency] = resp.FunctionId
+							autoscaler.UpdateDependencyCache(dependency, resp.FunctionId)
+						})
+					} else {
+						dependencyAddresses[dependency] = v
 					}
 
-					config := &commonpb.Config{
-						Memory: memory,
-						Cpu:    cpuConfig,
-					}
-
-					image := &commonpb.Image{
-						Tag: dependency,
-					}
-
-					createReq := &leaf.CreateFunctionRequest{
-						Image:  image,
-						Config: config,
-					}
-
-					wg.Go(func() {
-						resp, _ := s.CreateFunction(ctx, createReq)
-						dependencyAddresses[dependency] = resp.FunctionId
-						autoscaler.UpdateDependencyCache(dependency, resp.FunctionId)
-					})
-				} else {
-					dependencyAddresses[dependency] = v
 				}
-
+				wg.Wait()
 			}
-
-			wg.Wait()
 
 			//as soon as dependencies are there
 			_, err := s.startInstance(ctx, workerID, functionID, nil)

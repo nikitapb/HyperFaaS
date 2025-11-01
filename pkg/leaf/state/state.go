@@ -29,10 +29,10 @@ func NewSmallState(workers []WorkerID, logger *slog.Logger) *SmallState {
 	}
 }
 
-func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error) {
+func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, functionDependencies []string, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error) {
 	s.mu.Lock()
 
-	s.autoscalers[functionID] = NewAutoscaler(functionID, s.workers, metricChan, scaleUpCallback, s.logger)
+	s.autoscalers[functionID] = NewAutoscaler(functionID, functionDependencies, s.workers, metricChan, scaleUpCallback, s.logger)
 	// TODO: pick a way to manage context correctly
 	go s.autoscalers[functionID].Scale(context.TODO())
 	s.mu.Unlock()
@@ -63,14 +63,12 @@ type Autoscaler struct {
 	logger                    *slog.Logger
 }
 
-func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error, logger *slog.Logger) *Autoscaler {
-	var dmap map[string]string //placeholder
-	var deps []string          //placeholder
+func NewAutoscaler(functionID FunctionID, functionDependencies []string, workers []WorkerID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error, logger *slog.Logger) *Autoscaler {
 
 	as := &Autoscaler{
 		functionID:                functionID,
-		functionDependencies:      deps,
-		dependencyCache:           *NewDependencyMap(dmap),
+		functionDependencies:      functionDependencies,
+		dependencyCache:           *NewDependencyMap(make(map[string]string)),
 		workers:                   workers,
 		MetricChan:                metricChan,
 		scaleUpCallback:           scaleUpCallback,
@@ -83,7 +81,6 @@ func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bo
 		maxRunningInstances:       10,
 		targetInstanceConcurrency: 250,
 	}
-	as.runningInstances.Add(1) //since Autoscaler runs after a first instance has been started
 	return as
 }
 

@@ -30,6 +30,8 @@ message Config {
   CPUConfig cpu = 2;
   int32 timeout = 3;
   int32 max_concurrency = 4;
+  repeated string functionDependencies = 5;
+  
 }
 
 // Container CPU configuration. 
