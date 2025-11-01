@@ -43,7 +43,7 @@ type Function struct {
 	dependencies []string //slice of imagetags
 }
 
-func New(timeout int, dependencies []string) *Function {
+func New(timeout int) *Function {
 	controllerAddress, ok := os.LookupEnv("CONTROLLER_ADDRESS")
 	if !ok {
 		fmt.Printf("Environment variable CONTROLLER_ADDRESS not found")
@@ -61,7 +61,7 @@ func New(timeout int, dependencies []string) *Function {
 		response:          &Response{},
 		instanceId:        getID(),
 		functionId:        functionId,
-		dependencies:      dependencies,
+		//dependencies:      dependencies,
 	}
 }
 
