@@ -29,7 +29,7 @@ func NewSmallState(workers []WorkerID, logger *slog.Logger) *SmallState {
 	}
 }
 
-func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID) error) {
+func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error) {
 	s.mu.Lock()
 
 	s.autoscalers[functionID] = NewAutoscaler(functionID, s.workers, metricChan, scaleUpCallback, s.logger)
@@ -47,6 +47,8 @@ func (s *SmallState) GetAutoscaler(functionID FunctionID) (*Autoscaler, bool) {
 
 type Autoscaler struct {
 	functionID                FunctionID
+	functionDependencies      []string
+	dependencyCache           DependencyMap
 	workers                   []WorkerID
 	panicMode                 atomic.Bool
 	MetricChan                chan bool
@@ -57,13 +59,18 @@ type Autoscaler struct {
 	maxRunningInstances       int32
 	targetInstanceConcurrency int32
 	evaluationInterval        time.Duration
-	scaleUpCallback           func(ctx context.Context, functionID FunctionID, workerID WorkerID) error
+	scaleUpCallback           func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error
 	logger                    *slog.Logger
 }
 
-func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID) error, logger *slog.Logger) *Autoscaler {
+func NewAutoscaler(functionID FunctionID, workers []WorkerID, metricChan chan bool, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error, logger *slog.Logger) *Autoscaler {
+	var dmap map[string]string //placeholder
+	var deps []string          //placeholder
+
 	as := &Autoscaler{
 		functionID:                functionID,
+		functionDependencies:      deps,
+		dependencyCache:           *NewDependencyMap(dmap),
 		workers:                   workers,
 		MetricChan:                metricChan,
 		scaleUpCallback:           scaleUpCallback,
@@ -116,7 +123,7 @@ func (a *Autoscaler) Scale(ctx context.Context) {
 				if runningInstances < a.maxRunningInstances && startingInstances < a.maxStartingInstances {
 					a.startingInstances.Add(1)
 					// TODO: pick a better way to pick a worker.
-					err := a.scaleUpCallback(ctx, a.functionID, a.workers[0])
+					err := a.scaleUpCallback(ctx, a.functionID, a.workers[0], a.functionDependencies) //<-- needs state or smth providing dependencies and fID
 					if err != nil {
 						a.logger.Error("Failed to scale up", "error", err)
 					} else {
@@ -150,7 +157,7 @@ func (a *Autoscaler) ForceScaleUp(ctx context.Context) error {
 	a.panicMode.Store(true)
 	a.startingInstances.Add(1)
 	// TODO: implement a better way to pick a worker.
-	err := a.scaleUpCallback(ctx, a.functionID, a.workers[0])
+	err := a.scaleUpCallback(ctx, a.functionID, a.workers[0], a.functionDependencies)
 	if err != nil {
 		a.logger.Error("Failed to scale up", "error", err)
 		return &ScaleUpFailedError{FunctionID: a.functionID, WorkerID: a.workers[0], Err: err}
@@ -160,4 +167,36 @@ func (a *Autoscaler) ForceScaleUp(ctx context.Context) error {
 	a.startingInstances.Add(-1)
 	a.runningInstances.Add(1)
 	return nil
+}
+
+func (a *Autoscaler) GetDependencyCache() map[string]string {
+	return a.dependencyCache.m
+}
+
+func (a *Autoscaler) UpdateDependencyCache(imageTag string, fID string) {
+	a.dependencyCache.Set(imageTag, fID)
+}
+
+type DependencyMap struct {
+	mu sync.RWMutex
+	m  map[string]string
+}
+
+func NewDependencyMap(defaults map[string]string) *DependencyMap {
+	return &DependencyMap{
+		m: defaults,
+	}
+}
+
+func (s *DependencyMap) Get(key string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.m[key]
+	return v, ok
+}
+
+func (s *DependencyMap) Set(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[key] = value
 }

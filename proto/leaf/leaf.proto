@@ -9,7 +9,7 @@ option go_package = "github.com/3s-rg-codes/HyperFaaS/proto/leaf";
 
 message CreateFunctionRequest {
   common.Image image = 1;
-  common.Config config = 2;
+  common.Config config = 2; // add dependency map
 }
 
 message CreateFunctionResponse {

@@ -11,7 +11,7 @@ import (
 
 	kv "github.com/3s-rg-codes/HyperFaaS/pkg/keyValueStore"
 	"github.com/3s-rg-codes/HyperFaaS/pkg/leaf/config"
-	"github.com/3s-rg-codes/HyperFaaS/pkg/leaf/state"
+	state "github.com/3s-rg-codes/HyperFaaS/pkg/leaf/state"
 	"github.com/3s-rg-codes/HyperFaaS/proto/common"
 	commonpb "github.com/3s-rg-codes/HyperFaaS/proto/common"
 	"github.com/3s-rg-codes/HyperFaaS/proto/leaf"
@@ -35,7 +35,6 @@ type LeafServer struct {
 	functionIdCache          map[string]kv.FunctionData
 	workerClients            workerClients
 	logger                   *slog.Logger
-	dependencyCache          map[string]dependencyData
 }
 
 type workerClients struct {
@@ -46,41 +45,6 @@ type workerClients struct {
 type workerClient struct {
 	conn   *grpc.ClientConn
 	client workerPB.WorkerClient
-}
-
-type dependencyData struct {
-	functionID string
-	instanceID string
-	ip         string
-}
-
-type dependencyUpdate struct {
-	dependency string
-	address    string
-}
-
-type DependencyMap struct {
-	mu sync.RWMutex
-	m  map[string]string
-}
-
-func NewDependencyMap(defaults map[string]string) *DependencyMap {
-	return &DependencyMap{
-		m: defaults,
-	}
-}
-
-func (s *DependencyMap) Get(key string) (string, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	v, ok := s.m[key]
-	return v, ok
-}
-
-func (s *DependencyMap) Set(key, value string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.m[key] = value
 }
 
 // CreateFunction should only create the function, e.g. save its Config and image tag in local cache
@@ -96,20 +60,20 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 		Image:  req.Image,
 	}
 
-	var dependencies []string //slice of imageTags, that are the function's dependencies
-	dependencyMap := s.StartDependencies(ctx, functionID, req.Image.Tag, dependencies)
+	//slice of imageTags, that are the function's dependencies
+	//dependencyMap := s.StartDependencies(ctx, functionID, req.Image.Tag, dependencies)
 
 	//next, start function itself
-	startResp, err := s.startInstance(ctx, s.workerIds[0], state.FunctionID(functionID), dependencyMap) //also pass dependencyMap
+	//startResp, err := s.startInstance(ctx, s.workerIds[0], state.FunctionID(functionID), dependencyMap) //also pass dependencyMap
 
 	if err != nil {
 		return nil, err
 	}
-	s.dependencyCache[req.Image.Tag] = dependencyData{
-		instanceID: string(startResp.InstanceId),
-		functionID: functionID,
-		ip:         startResp.InstanceIp,
-	}
+	//s.dependencyCache[req.Image.Tag] = dependencyData{
+	//	instanceID: string(startResp.InstanceId),
+	//	functionID: functionID,
+	//	ip:         startResp.InstanceIp,
+	//}
 
 	s.functionMetricChansMutex.Lock()
 	s.functionMetricChans[state.FunctionID(functionID)] = make(chan bool, 10000)
@@ -117,8 +81,62 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 	s.state.AddFunction(state.FunctionID(functionID),
 		s.functionMetricChans[state.FunctionID(functionID)],
-		func(ctx context.Context, functionID state.FunctionID, workerID state.WorkerID) error {
+		func(ctx context.Context, functionID state.FunctionID, workerID state.WorkerID, dependencies []string) error {
+			// TODO: implement dependency check
+			var wg sync.WaitGroup
+			dependencyAddresses := make(map[string]string)
+
+			autoscaler, ok := s.state.GetAutoscaler(functionID)
+
+			if !ok {
+				return err
+			}
+
+			cache := autoscaler.GetDependencyCache()
+
+			for _, dependency := range dependencies {
+				v, ok := cache[dependency]
+
+				if !ok {
+					var cpuPeriod int64
+					var cpuQuota int64
+					var memory int64
+
+					cpuConfig := &commonpb.CPUConfig{
+						Period: cpuPeriod,
+						Quota:  cpuQuota,
+					}
+
+					config := &commonpb.Config{
+						Memory: memory,
+						Cpu:    cpuConfig,
+					}
+
+					image := &commonpb.Image{
+						Tag: dependency,
+					}
+
+					createReq := &leaf.CreateFunctionRequest{
+						Image:  image,
+						Config: config,
+					}
+
+					wg.Go(func() {
+						resp, _ := s.CreateFunction(ctx, createReq)
+						dependencyAddresses[dependency] = resp.FunctionId
+						autoscaler.UpdateDependencyCache(dependency, resp.FunctionId)
+					})
+				} else {
+					dependencyAddresses[dependency] = v
+				}
+
+			}
+
+			wg.Wait()
+
+			//as soon as dependencies are there
 			_, err := s.startInstance(ctx, workerID, functionID, nil)
+
 			if err != nil {
 				return err
 			}
@@ -128,63 +146,6 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 	return &leaf.CreateFunctionResponse{
 		FunctionId: functionID,
 	}, nil
-
-}
-
-func (s *LeafServer) StartDependencies(ctx context.Context, functionID string, imageTag string, dependencies []string) *DependencyMap {
-
-	//first check for dependencies
-	dependencyAddresses := NewDependencyMap(make(map[string]string)) //map of imageTag -> address to pass to function
-
-	updates := make(chan dependencyUpdate)
-
-	go func() {
-		for u := range updates {
-			dependencyAddresses.Set(u.dependency, u.address)
-		}
-	}()
-
-	for _, dependency := range dependencies {
-		v, ok := s.dependencyCache[dependency] // check if dependency already instantiated
-
-		if ok { // if yes, add
-			dependencyAddresses.Set(dependency, v.ip)
-		} else { // if no, create new and then add
-			var cpuPeriod int64
-			var cpuQuota int64
-			var memory int64
-
-			cpuConfig := &commonpb.CPUConfig{
-				Period: cpuPeriod,
-				Quota:  cpuQuota,
-			}
-
-			config := &commonpb.Config{
-				Memory: memory,
-				Cpu:    cpuConfig,
-			}
-
-			image := &commonpb.Image{
-				Tag: dependency,
-			}
-
-			createReq := &leaf.CreateFunctionRequest{
-				Image:  image,
-				Config: config,
-			}
-
-			go func() {
-				resp, _ := s.CreateFunction(ctx, createReq)
-				newAddr := resp.FunctionId
-				updates <- dependencyUpdate{
-					dependency: dependency,
-					address:    newAddr,
-				}
-			}()
-		}
-	}
-
-	return dependencyAddresses
 
 }
 
@@ -251,7 +212,6 @@ func NewLeafServer(
 		state:               state.NewSmallState(workerIds, logger),
 		logger:              logger,
 		leafConfig:          leafConfig,
-		dependencyCache:     make(map[string]dependencyData),
 	}
 	ls.state.RunReconciler(context.Background())
 	return &ls
@@ -281,18 +241,18 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 	return resp, nil
 }
 
-func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID, dependencyMap *DependencyMap) (*workerPB.StartResponse, error) {
+func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID, dependencyMap *state.DependencyMap) (*workerPB.StartResponse, error) {
 	client, err := s.getOrCreateWorkerClient(workerID)
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := client.Start(ctx, &workerPB.StartRequest{FunctionId: string(functionId)})
 	if err != nil {
 		return nil, err
 	}
 
-	return resp, nil //we should use proto here, too
-	//return resp
+	return resp, nil
 }
 
 func (s *LeafServer) getOrCreateWorkerClient(workerID state.WorkerID) (workerPB.WorkerClient, error) {

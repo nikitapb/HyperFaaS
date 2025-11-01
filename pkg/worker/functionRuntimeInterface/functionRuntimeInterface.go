@@ -40,9 +40,10 @@ type Function struct {
 	server            *grpc.Server
 	logger            *slog.Logger
 	functionpb.UnimplementedFunctionServiceServer
+	dependencies []string //slice of imagetags
 }
 
-func New(timeout int) *Function {
+func New(timeout int, dependencies []string) *Function {
 	controllerAddress, ok := os.LookupEnv("CONTROLLER_ADDRESS")
 	if !ok {
 		fmt.Printf("Environment variable CONTROLLER_ADDRESS not found")
@@ -60,6 +61,7 @@ func New(timeout int) *Function {
 		response:          &Response{},
 		instanceId:        getID(),
 		functionId:        functionId,
+		dependencies:      dependencies,
 	}
 }
 
