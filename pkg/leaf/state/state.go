@@ -4,6 +4,7 @@ package state
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"sync/atomic"
@@ -31,7 +32,6 @@ func NewSmallState(workers []WorkerID, logger *slog.Logger) *SmallState {
 
 func (s *SmallState) AddFunction(functionID FunctionID, metricChan chan bool, functionDependencies []string, scaleUpCallback func(ctx context.Context, functionID FunctionID, workerID WorkerID, dependencies []string) error) {
 	s.mu.Lock()
-
 	s.autoscalers[functionID] = NewAutoscaler(functionID, functionDependencies, s.workers, metricChan, scaleUpCallback, s.logger)
 	// TODO: pick a way to manage context correctly
 	go s.autoscalers[functionID].Scale(context.TODO())
@@ -100,11 +100,17 @@ func (a *Autoscaler) runMetricReceiver(ctx context.Context) {
 }
 
 func (a *Autoscaler) Scale(ctx context.Context) {
+	a.logger.Info(fmt.Sprintf("%v: starting autoscaler with dependencies %v", a.functionID, a.functionDependencies))
 	go a.runMetricReceiver(ctx)
 	ticker := time.NewTicker(a.evaluationInterval)
 	defer ticker.Stop()
+	c := 0
 
 	for {
+		if c%10 == 0 {
+			a.logger.Info(fmt.Sprintf("%v: autoscaler is alive!", a.functionID))
+		}
+		c += 1
 		select {
 		case <-ctx.Done():
 			return
@@ -120,6 +126,7 @@ func (a *Autoscaler) Scale(ctx context.Context) {
 				if runningInstances < a.maxRunningInstances && startingInstances < a.maxStartingInstances {
 					a.startingInstances.Add(1)
 					// TODO: pick a better way to pick a worker.
+					a.logger.Info(fmt.Sprintf("%v, autoscaler calling scaleUpCallback()", a.functionID))
 					err := a.scaleUpCallback(ctx, a.functionID, a.workers[0], a.functionDependencies) //<-- needs state or smth providing dependencies and fID
 					if err != nil {
 						a.logger.Error("Failed to scale up", "error", err)

@@ -66,6 +66,8 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 		return nil, err
 	}
 
+	s.logger.Info(fmt.Sprintf("%v: leaf creating function %v with dependencies %v", functionID, req.Image.Tag, functionDependencies))
+
 	s.functionMetricChansMutex.Lock()
 	s.functionMetricChans[state.FunctionID(functionID)] = make(chan bool, 10000)
 	s.functionMetricChansMutex.Unlock()
@@ -125,7 +127,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 				}
 				wg.Wait()
 			}
-
+			s.logger.Info(fmt.Sprintf("%v, scaleUpCallback: successfully initiated dependencies: %v \t IDs: %v", functionID, dependencies, dependencyAddresses))
 			//as soon as dependencies are there
 			_, err := s.startInstance(ctx, workerID, functionID, nil)
 

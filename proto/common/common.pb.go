@@ -2,7 +2,7 @@
 // versions:
 // 	protoc-gen-go v1.36.10
 // 	protoc        v3.21.12
-// source: common.proto
+// source: common/common.proto
 
 package common
 
@@ -30,7 +30,7 @@ type Error struct {
 
 func (x *Error) Reset() {
 	*x = Error{}
-	mi := &file_common_proto_msgTypes[0]
+	mi := &file_common_common_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -42,7 +42,7 @@ func (x *Error) String() string {
 func (*Error) ProtoMessage() {}
 
 func (x *Error) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[0]
+	mi := &file_common_common_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -55,7 +55,7 @@ func (x *Error) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Error.ProtoReflect.Descriptor instead.
 func (*Error) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{0}
+	return file_common_common_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *Error) GetMessage() string {
@@ -74,7 +74,7 @@ type Image struct {
 
 func (x *Image) Reset() {
 	*x = Image{}
-	mi := &file_common_proto_msgTypes[1]
+	mi := &file_common_common_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -86,7 +86,7 @@ func (x *Image) String() string {
 func (*Image) ProtoMessage() {}
 
 func (x *Image) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[1]
+	mi := &file_common_common_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -99,7 +99,7 @@ func (x *Image) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Image.ProtoReflect.Descriptor instead.
 func (*Image) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{1}
+	return file_common_common_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Image) GetTag() string {
@@ -114,14 +114,16 @@ type CallRequest struct {
 	// The unique identifier of the function to invoke.
 	FunctionId string `protobuf:"bytes,1,opt,name=function_id,json=functionId,proto3" json:"function_id,omitempty"`
 	// The data to pass to the function.
-	Data          []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	// The function's dependencies
+	DependencyMap map[string]string `protobuf:"bytes,3,rep,name=dependencyMap,proto3" json:"dependencyMap,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CallRequest) Reset() {
 	*x = CallRequest{}
-	mi := &file_common_proto_msgTypes[2]
+	mi := &file_common_common_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -133,7 +135,7 @@ func (x *CallRequest) String() string {
 func (*CallRequest) ProtoMessage() {}
 
 func (x *CallRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[2]
+	mi := &file_common_common_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -146,7 +148,7 @@ func (x *CallRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallRequest.ProtoReflect.Descriptor instead.
 func (*CallRequest) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{2}
+	return file_common_common_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CallRequest) GetFunctionId() string {
@@ -163,6 +165,13 @@ func (x *CallRequest) GetData() []byte {
 	return nil
 }
 
+func (x *CallRequest) GetDependencyMap() map[string]string {
+	if x != nil {
+		return x.DependencyMap
+	}
+	return nil
+}
+
 type CallResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The result data from the function call.
@@ -175,7 +184,7 @@ type CallResponse struct {
 
 func (x *CallResponse) Reset() {
 	*x = CallResponse{}
-	mi := &file_common_proto_msgTypes[3]
+	mi := &file_common_common_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -187,7 +196,7 @@ func (x *CallResponse) String() string {
 func (*CallResponse) ProtoMessage() {}
 
 func (x *CallResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[3]
+	mi := &file_common_common_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -200,7 +209,7 @@ func (x *CallResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallResponse.ProtoReflect.Descriptor instead.
 func (*CallResponse) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{3}
+	return file_common_common_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *CallResponse) GetData() []byte {
@@ -231,7 +240,7 @@ type Config struct {
 
 func (x *Config) Reset() {
 	*x = Config{}
-	mi := &file_common_proto_msgTypes[4]
+	mi := &file_common_common_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +252,7 @@ func (x *Config) String() string {
 func (*Config) ProtoMessage() {}
 
 func (x *Config) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[4]
+	mi := &file_common_common_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,7 +265,7 @@ func (x *Config) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Config.ProtoReflect.Descriptor instead.
 func (*Config) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{4}
+	return file_common_common_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Config) GetMemory() int64 {
@@ -309,7 +318,7 @@ type CPUConfig struct {
 
 func (x *CPUConfig) Reset() {
 	*x = CPUConfig{}
-	mi := &file_common_proto_msgTypes[5]
+	mi := &file_common_common_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -321,7 +330,7 @@ func (x *CPUConfig) String() string {
 func (*CPUConfig) ProtoMessage() {}
 
 func (x *CPUConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_common_proto_msgTypes[5]
+	mi := &file_common_common_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -334,7 +343,7 @@ func (x *CPUConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CPUConfig.ProtoReflect.Descriptor instead.
 func (*CPUConfig) Descriptor() ([]byte, []int) {
-	return file_common_proto_rawDescGZIP(), []int{5}
+	return file_common_common_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *CPUConfig) GetPeriod() int64 {
@@ -351,19 +360,23 @@ func (x *CPUConfig) GetQuota() int64 {
 	return 0
 }
 
-var File_common_proto protoreflect.FileDescriptor
+var File_common_common_proto protoreflect.FileDescriptor
 
-const file_common_proto_rawDesc = "" +
+const file_common_common_proto_rawDesc = "" +
 	"\n" +
-	"\fcommon.proto\x12\x06common\"!\n" +
+	"\x13common/common.proto\x12\x06common\"!\n" +
 	"\x05Error\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"\x19\n" +
 	"\x05Image\x12\x10\n" +
-	"\x03tag\x18\x01 \x01(\tR\x03tag\"B\n" +
+	"\x03tag\x18\x01 \x01(\tR\x03tag\"\xd2\x01\n" +
 	"\vCallRequest\x12\x1f\n" +
 	"\vfunction_id\x18\x01 \x01(\tR\n" +
 	"functionId\x12\x12\n" +
-	"\x04data\x18\x02 \x01(\fR\x04data\"G\n" +
+	"\x04data\x18\x02 \x01(\fR\x04data\x12L\n" +
+	"\rdependencyMap\x18\x03 \x03(\v2&.common.CallRequest.DependencyMapEntryR\rdependencyMap\x1a@\n" +
+	"\x12DependencyMapEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"G\n" +
 	"\fCallResponse\x12\x12\n" +
 	"\x04data\x18\x01 \x01(\fR\x04data\x12#\n" +
 	"\x05error\x18\x02 \x01(\v2\r.common.ErrorR\x05error\"\xbc\x01\n" +
@@ -378,56 +391,58 @@ const file_common_proto_rawDesc = "" +
 	"\x05quota\x18\x02 \x01(\x03R\x05quotaB/Z-github.com/3s-rg-codes/HyperFaaS/proto/commonb\x06proto3"
 
 var (
-	file_common_proto_rawDescOnce sync.Once
-	file_common_proto_rawDescData []byte
+	file_common_common_proto_rawDescOnce sync.Once
+	file_common_common_proto_rawDescData []byte
 )
 
-func file_common_proto_rawDescGZIP() []byte {
-	file_common_proto_rawDescOnce.Do(func() {
-		file_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_proto_rawDesc), len(file_common_proto_rawDesc)))
+func file_common_common_proto_rawDescGZIP() []byte {
+	file_common_common_proto_rawDescOnce.Do(func() {
+		file_common_common_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_common_common_proto_rawDesc), len(file_common_common_proto_rawDesc)))
 	})
-	return file_common_proto_rawDescData
+	return file_common_common_proto_rawDescData
 }
 
-var file_common_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
-var file_common_proto_goTypes = []any{
+var file_common_common_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_common_common_proto_goTypes = []any{
 	(*Error)(nil),        // 0: common.Error
 	(*Image)(nil),        // 1: common.Image
 	(*CallRequest)(nil),  // 2: common.CallRequest
 	(*CallResponse)(nil), // 3: common.CallResponse
 	(*Config)(nil),       // 4: common.Config
 	(*CPUConfig)(nil),    // 5: common.CPUConfig
+	nil,                  // 6: common.CallRequest.DependencyMapEntry
 }
-var file_common_proto_depIdxs = []int32{
-	0, // 0: common.CallResponse.error:type_name -> common.Error
-	5, // 1: common.Config.cpu:type_name -> common.CPUConfig
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+var file_common_common_proto_depIdxs = []int32{
+	6, // 0: common.CallRequest.dependencyMap:type_name -> common.CallRequest.DependencyMapEntry
+	0, // 1: common.CallResponse.error:type_name -> common.Error
+	5, // 2: common.Config.cpu:type_name -> common.CPUConfig
+	3, // [3:3] is the sub-list for method output_type
+	3, // [3:3] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_common_proto_init() }
-func file_common_proto_init() {
-	if File_common_proto != nil {
+func init() { file_common_common_proto_init() }
+func file_common_common_proto_init() {
+	if File_common_common_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_proto_rawDesc), len(file_common_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_common_common_proto_rawDesc), len(file_common_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_common_proto_goTypes,
-		DependencyIndexes: file_common_proto_depIdxs,
-		MessageInfos:      file_common_proto_msgTypes,
+		GoTypes:           file_common_common_proto_goTypes,
+		DependencyIndexes: file_common_common_proto_depIdxs,
+		MessageInfos:      file_common_common_proto_msgTypes,
 	}.Build()
-	File_common_proto = out.File
-	file_common_proto_goTypes = nil
-	file_common_proto_depIdxs = nil
+	File_common_common_proto = out.File
+	file_common_common_proto_goTypes = nil
+	file_common_common_proto_depIdxs = nil
 }
