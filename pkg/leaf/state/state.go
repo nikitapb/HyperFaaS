@@ -126,7 +126,7 @@ func (a *Autoscaler) Scale(ctx context.Context) {
 				if runningInstances < a.maxRunningInstances && startingInstances < a.maxStartingInstances {
 					a.startingInstances.Add(1)
 					// TODO: pick a better way to pick a worker.
-					a.logger.Info(fmt.Sprintf("%v, autoscaler calling scaleUpCallback()", a.functionID))
+					a.logger.Info(fmt.Sprintf("%v, autoscaler calling scaleUpCallback(), reason:%v", a.functionID, a.scaleUpReason(int(runningInstances), int(concurrencyLevel))))
 					err := a.scaleUpCallback(ctx, a.functionID, a.workers[0], a.functionDependencies) //<-- needs state or smth providing dependencies and fID
 					if err != nil {
 						a.logger.Error("Failed to scale up", "error", err)
@@ -138,6 +138,17 @@ func (a *Autoscaler) Scale(ctx context.Context) {
 				}
 			}
 		}
+	}
+}
+
+func (a *Autoscaler) scaleUpReason(runningInstances, concurrencyLevel int) string {
+	switch {
+	case runningInstances == 0:
+		return "no running instances"
+	case float64(concurrencyLevel)/float64(runningInstances) > float64(a.targetInstanceConcurrency):
+		return "high concurrency per instance"
+	default:
+		return "unspecified condition"
 	}
 }
 

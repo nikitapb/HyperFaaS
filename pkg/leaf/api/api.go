@@ -35,6 +35,8 @@ type LeafServer struct {
 	functionIdCache          map[string]kv.FunctionData
 	workerClients            workerClients
 	logger                   *slog.Logger
+	leafDependencyMap        DependencyMap //to be passed automatically upon the creation of CallRequests
+	leafDependencyMap2       map[string]string
 }
 
 type workerClients struct {
@@ -79,19 +81,17 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 			var wg sync.WaitGroup
 			dependencyAddresses := make(map[string]string)
 
-			autoscaler, ok := s.state.GetAutoscaler(functionID)
-
-			if !ok {
-				return err
-			}
-
-			cache := autoscaler.GetDependencyCache()
+			allInCache := true
+			cache := s.leafDependencyMap2
 
 			if !(dependencies == nil) && !(len(dependencies) == 0) {
 				for _, dependency := range dependencies {
 					v, ok := cache[dependency]
 
 					if !ok {
+						if allInCache {
+							allInCache = false
+						}
 						var cpuPeriod int64
 						var cpuQuota int64
 						var memory int64
@@ -118,7 +118,8 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 						wg.Go(func() {
 							resp, _ := s.CreateFunction(ctx, createReq)
 							dependencyAddresses[dependency] = resp.FunctionId
-							autoscaler.UpdateDependencyCache(dependency, resp.FunctionId)
+							//s.UpdateDependencyCache(dependency, resp.FunctionId)
+							s.leafDependencyMap2[dependency] = resp.FunctionId
 						})
 					} else {
 						dependencyAddresses[dependency] = v
@@ -126,8 +127,11 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 				}
 				wg.Wait()
+
+				if !allInCache {
+					s.logger.Info(fmt.Sprintf("%v, scaleUpCallback: successfully initiated dependencies: %v \t IDs: %v", functionID, dependencies, dependencyAddresses))
+				}
 			}
-			s.logger.Info(fmt.Sprintf("%v, scaleUpCallback: successfully initiated dependencies: %v \t IDs: %v", functionID, dependencies, dependencyAddresses))
 			//as soon as dependencies are there
 			_, err := s.startInstance(ctx, workerID, functionID, nil)
 
@@ -144,6 +148,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 }
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *commonpb.CallRequest) (*commonpb.CallResponse, error) {
+	s.logger.Info(fmt.Sprintf("ScheduleCall() for %v", req.FunctionId))
 	autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionId))
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "function id not found")
@@ -206,6 +211,8 @@ func NewLeafServer(
 		state:               state.NewSmallState(workerIds, logger),
 		logger:              logger,
 		leafConfig:          leafConfig,
+		leafDependencyMap:   *NewDependencyMap(make(map[string]string)),
+		leafDependencyMap2:  make(map[string]string),
 	}
 	ls.state.RunReconciler(context.Background())
 	return &ls
@@ -219,8 +226,9 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 
 	var resp *commonpb.CallResponse
 	callReq := &commonpb.CallRequest{
-		FunctionId: string(functionID),
-		Data:       req.Data,
+		FunctionId:    string(functionID),
+		Data:          req.Data,
+		DependencyMap: s.leafDependencyMap2,
 	}
 
 	resp, err = client.Call(ctx, callReq)
@@ -269,4 +277,36 @@ func (s *LeafServer) getOrCreateWorkerClient(workerID state.WorkerID) (workerPB.
 		return cl, nil
 	}
 	return client.client, nil
+}
+
+type DependencyMap struct {
+	mu sync.RWMutex
+	m  map[string]string
+}
+
+func NewDependencyMap(defaults map[string]string) *DependencyMap {
+	return &DependencyMap{
+		m: defaults,
+	}
+}
+
+func (s *DependencyMap) Get(key string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	v, ok := s.m[key]
+	return v, ok
+}
+
+func (s *DependencyMap) Set(key, value string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m[key] = value
+}
+
+func (s *LeafServer) GetDependencyCache() map[string]string {
+	return s.leafDependencyMap.m
+}
+
+func (s *LeafServer) UpdateDependencyCache(imageTag string, fID string) {
+	s.leafDependencyMap.Set(imageTag, fID)
 }

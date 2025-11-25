@@ -28,9 +28,10 @@ func (f *CallRouter) CallFunction(id string, req *common.CallRequest) (*common.C
 		return nil, fmt.Errorf("no router found for function ID: %s", id)
 	}
 	f.logger.Debug("Router state", "router", router.DebugState())
+	f.logger.Info(fmt.Sprintf("Received call request %v", req))
 	resp, err := router.Client.Call(context.Background(), req)
 	if err != nil {
-		f.logger.Error("Error calling function", "id", id, "error", err)
+		f.logger.Error("Error calling function", "id", id, "error\n", err)
 		return nil, err
 	} else {
 		return resp, nil
