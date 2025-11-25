@@ -36,7 +36,6 @@ type LeafServer struct {
 	workerClients            workerClients
 	logger                   *slog.Logger
 	leafDependencyMap        DependencyMap //to be passed automatically upon the creation of CallRequests
-	leafDependencyMap2       map[string]string
 }
 
 type workerClients struct {
@@ -64,10 +63,6 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 		Image:  req.Image,
 	}
 
-	if err != nil {
-		return nil, err
-	}
-
 	s.logger.Info(fmt.Sprintf("%v: leaf creating function %v with dependencies %v", functionID, req.Image.Tag, functionDependencies))
 
 	s.functionMetricChansMutex.Lock()
@@ -82,7 +77,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 			dependencyAddresses := make(map[string]string)
 
 			allInCache := true
-			cache := s.leafDependencyMap2
+			cache := s.GetDependencyCache()
 
 			if !(dependencies == nil) && !(len(dependencies) == 0) {
 				for _, dependency := range dependencies {
@@ -118,8 +113,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 						wg.Go(func() {
 							resp, _ := s.CreateFunction(ctx, createReq)
 							dependencyAddresses[dependency] = resp.FunctionId
-							//s.UpdateDependencyCache(dependency, resp.FunctionId)
-							s.leafDependencyMap2[dependency] = resp.FunctionId
+							s.UpdateDependencyCache(dependency, resp.FunctionId)
 						})
 					} else {
 						dependencyAddresses[dependency] = v
@@ -212,7 +206,6 @@ func NewLeafServer(
 		logger:              logger,
 		leafConfig:          leafConfig,
 		leafDependencyMap:   *NewDependencyMap(make(map[string]string)),
-		leafDependencyMap2:  make(map[string]string),
 	}
 	ls.state.RunReconciler(context.Background())
 	return &ls
@@ -228,7 +221,7 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 	callReq := &commonpb.CallRequest{
 		FunctionId:    string(functionID),
 		Data:          req.Data,
-		DependencyMap: s.leafDependencyMap2,
+		DependencyMap: s.GetDependencyCache(),
 	}
 
 	resp, err = client.Call(ctx, callReq)
