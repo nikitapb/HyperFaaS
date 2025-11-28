@@ -86,6 +86,7 @@ func dependencyCaller(imageTag string, data []byte) (*common.CallResponse, error
 
 	if err != nil {
 		fmt.Printf("function: Error creating dependency-function: %v\n", err)
+		cancel()
 		return nil, err
 	}
 
@@ -94,7 +95,10 @@ func dependencyCaller(imageTag string, data []byte) (*common.CallResponse, error
 		Data:       data,
 	}
 
-	scheduleCallResponse, err := client.ScheduleCall(ctx, scheduleCallReq)
+	ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel2()
+
+	scheduleCallResponse, err := client.ScheduleCall(ctx2, scheduleCallReq)
 
 	if err != nil {
 		fmt.Printf("function: Error scheduling call: %v\n", err)

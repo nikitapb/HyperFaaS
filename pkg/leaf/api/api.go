@@ -127,7 +127,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 				}
 			}
 			//as soon as dependencies are there
-			_, err := s.startInstance(ctx, workerID, functionID, nil)
+			_, err := s.startInstance(ctx, workerID, functionID)
 
 			if err != nil {
 				return err
@@ -143,6 +143,7 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *commonpb.CallRequest) (*commonpb.CallResponse, error) {
 	s.logger.Info(fmt.Sprintf("ScheduleCall() for %v", req.FunctionId))
+
 	autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionId))
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "function id not found")
@@ -236,7 +237,7 @@ func (s *LeafServer) callWorker(ctx context.Context, workerID state.WorkerID, fu
 	return resp, nil
 }
 
-func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID, dependencyMap *state.DependencyMap) (*workerPB.StartResponse, error) {
+func (s *LeafServer) startInstance(ctx context.Context, workerID state.WorkerID, functionId state.FunctionID) (*workerPB.StartResponse, error) {
 	client, err := s.getOrCreateWorkerClient(workerID)
 	if err != nil {
 		return nil, err

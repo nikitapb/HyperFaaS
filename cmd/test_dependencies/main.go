@@ -52,7 +52,6 @@ func main() {
 
 func CreateFunction(client leafpb.LeafClient, depFlag bool) (string, error) {
 
-	imageTag := "hyperfaas-hellodependencies:latest"
 	var cpuPeriod int64 = 100000
 	var cpuQuota int64 = 50000
 	var memory int64 = 1024 * 1024 * 256
@@ -67,11 +66,14 @@ func CreateFunction(client leafpb.LeafClient, depFlag bool) (string, error) {
 		Memory: memory,
 		Cpu:    cpuConfig,
 	}
-
+	var imageTag string
 	var dependencies [2]string
 	if depFlag {
+		imageTag = "hyperfaas-hellodependencies:latest"
 		dependencies = [2]string{"hyperfaas-hello:latest", "hyperfaas-echo:latest"}
 		config.FunctionDependencies = dependencies[:]
+	} else {
+		imageTag = "hyperfaas-byebyedependencies:latest"
 	}
 
 	funcReq := &leafpb.CreateFunctionRequest{
