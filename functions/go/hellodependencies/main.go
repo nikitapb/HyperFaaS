@@ -53,7 +53,7 @@ func handler(ctx context.Context, in *common.CallRequest) (*common.CallResponse,
 
 func dependencyCaller(functionID string, data []byte) (*common.CallResponse, error) {
 
-	client, _, err := createLeafClient("leaf:50050")
+	client, _, err := createLeafClient("127.0.0.1:50050")
 	if err != nil {
 		return nil, fmt.Errorf("failed establishing client connection! %w\n", err)
 	}
