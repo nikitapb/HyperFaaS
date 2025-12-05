@@ -114,7 +114,7 @@ func TestFunction(iterations int, depSwitch bool) error {
 
 			if err != nil {
 				fmt.Printf("[%v] Error scheduling call: %v\n", i+1, err)
-				return err
+				break
 			} else if callResp == nil {
 				fmt.Printf("[%v] WARNING: Response is nil!\n", i+1)
 			} else {
