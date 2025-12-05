@@ -143,7 +143,6 @@ func (s *LeafServer) CreateFunction(ctx context.Context, req *leaf.CreateFunctio
 
 func (s *LeafServer) ScheduleCall(ctx context.Context, req *commonpb.CallRequest) (*commonpb.CallResponse, error) {
 	s.logger.Info(fmt.Sprintf("ScheduleCall() for %v", req.FunctionId))
-
 	autoscaler, ok := s.state.GetAutoscaler(state.FunctionID(req.FunctionId))
 	if !ok {
 		return nil, status.Errorf(codes.NotFound, "function id not found")
