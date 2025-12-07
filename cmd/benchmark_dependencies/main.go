@@ -27,8 +27,8 @@ func main() {
 	depCmd := flag.NewFlagSet("yesDep", flag.ExitOnError)
 	noDepCmd := flag.NewFlagSet("noDep", flag.ExitOnError)
 
-	depCmd.IntVar(&iterations, "iterations", 100, "number of iterations to go through")
-	noDepCmd.IntVar(&iterations, "iterations", 100, "number of iterations to go through")
+	depCmd.IntVar(&iterations, "iterations", 1000, "number of iterations to go through")
+	noDepCmd.IntVar(&iterations, "iterations", 1000, "number of iterations to go through")
 
 	var depSwitch bool
 
